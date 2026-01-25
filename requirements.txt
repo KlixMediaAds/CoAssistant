@@ -1,0 +1,7 @@
+﻿RealtimeSTT
+pyaudio
+torch
+torchaudio
+colorama
+openai
+python-dotenv

@@ -1,0 +1,13 @@
+﻿--- MISSION: SELL DRONES ---
+GOAL: Sell the 'Klix AgDrone 3000' to a Farmer.
+USER ROLE: Sales Rep for Klix.
+TARGET: Farmer looking for efficiency.
+
+KEY SELLING POINTS:
+- 40-minute battery (beats DJI).
+- Autonomous spraying patterns.
+- ,500 price point.
+
+OBJECTION HANDLING:
+- "Too expensive" -> Pivot to fertilizer savings.
+- "Hard to fly" -> Explain the "One-Touch" auto-pilot.
