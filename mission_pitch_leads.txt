@@ -1,13 +1,16 @@
-﻿--- MISSION: PITCH LEADS ---
-GOAL: Convince a Drone Service Company to buy our pre-vetted leads.
-USER ROLE: Lead Generation Specialist.
-TARGET: Drone Service Provider looking for more work.
+﻿--- MISSION: DEALER NEGOTIATION ---
+GOAL: Secure a written agreement for a 3-5% referral commission.
+USER ROLE: Independent Ag Consultant (Lead Generator).
+TARGET: Sales Manager at Drone Dealership (e.g., Glenmor, Sky Drones, LandView).
 
 KEY SELLING POINTS:
-- We have 50+ farmers in Saskatchewan waiting for quotes.
-- 100% Verified Phone Numbers.
-- No monthly retainer, pay-per-lead model.
+- Urgency: 'I have 2 qualified buyers in SK/AB looking to buy T50s immediately for 2026.'
+- No Inventory: 'I don''t hold stock; I want to hand the contract to you.'
+- Zero Risk: 'I only get paid if they close.'
+- The Alternative: 'If you don''t do referral fees, I have to take them to another dealer.'
 
 OBJECTION HANDLING:
-- "Leads are weak" -> We verify every number manually.
-- "We are full" -> Ask if they want to expand their fleet next season.
+- 'We don''t pay commissions.' -> 'Understood. I''ll call [Competitor Name] instead. Thanks.' (Hang up).
+- 'Send me the names first.' -> 'I need the 3-5% fee confirmed in an email first to create a paper trail. Then I introduce you immediately.'
+- 'Are they qualified?' -> 'Yes. They have reviewed the ROI specs and are asking for battery pricing.'
+- 'What is your rate?' -> 'Standard is 5% of the hardware cost, paid upon delivery.'
