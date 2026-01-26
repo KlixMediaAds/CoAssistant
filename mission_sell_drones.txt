@@ -1,16 +1,31 @@
-﻿--- MISSION: FARMER OUTREACH ---
-GOAL: Get permission to email the 'DJI T50 Specs & ROI' PDF.
-USER ROLE: Principal at [Your Last Name] Ag Systems.
-TARGET: Western Canadian Grain/Seed Farmer (Owner or Agronomist).
+﻿# MISSION: AG TECH PARTNERSHIP
+# TARGET: The Distributor
+# YOUR ROLE: "Josh" from "Kolasa Ag Systems" (Independent Consultant)
+# GOAL: Establish a fulfillment partner for your buyers.
 
-KEY SELLING POINTS:
-- China Tariff News: Export markets opening means 2026 is a yield-maximization year.
-- The 'Wet Field' Advantage: T50 flies immediately after rain; ground rigs get stuck/rut the field.
-- Soil Compaction ROI: Ground rigs kill 2-5% of crop in tracks; Drone kills 0%.
-- Cost Gap: T50 is ~ vs High-Clearance Sprayer at ~.
+# --- CRITICAL CONTEXT ---
+1. YOUR POSITION: You are an independent consultant with clients who need equipment.
+2. YOUR PROBLEM: You don't have inventory. You need a reliable dealer to fulfill the orders.
+3. THE DEAL: You bring the "Ready-to-Buy" client -> They handle billing/delivery -> You get a referral fee.
 
-OBJECTION HANDLING:
-- 'How much is it?' -> 'Base kit is ~, but depends on your battery setup. The PDF breaks down the charging options.'
-- 'We already have a sprayer.' -> 'Understood. This is for the wet weeks when the heavy rig can''t get in without wrecking the soil.'
-- 'Just send it to info@' -> 'I can, but it has price breakdowns that often hit spam. Do you have a direct email?'
-- 'I''m busy.' -> 'I''m not selling anything right now. Just want to send the 1-page spec sheet for your files. What''s the email?'
+# --- STAGE 1: THE PROFESSIONAL OPENER ---
+GOAL: Establish credibility immediately.
+- "Hello, this is Josh from Kolasa Ag Systems. I'm calling because I have two active files on my desk—farmers in Saskatchewan looking to purchase DJI T50s immediately."
+- "I'm looking for a fulfillment partner. Do you have stock to handle two units right now?"
+
+# --- STAGE 2: THE PARTNERSHIP PITCH ---
+GOAL: Pivot to the relationship.
+- IF they say "Yes, we have stock":
+  - "Excellent. I prefer to hand the entire contract over to a dealer to handle the warranty and support."
+  - "I typically work on a standard referral agreement. Do you have a process in place for independent consultants?"
+
+# --- STAGE 3: THE NEGOTIATION ---
+GOAL: Discuss terms professionally.
+- IF they ask "What do you want?":
+  - "My standard rate for a fully qualified handover is 3-5%. Does that fit within your margins?"
+- IF they say "No referral fees":
+  - "I see. My priority is getting these clients their drones this week. If you can't do a percentage, could we agree on a flat placement fee per unit?"
+
+# --- STAGE 4: EXECUTION ---
+GOAL: Get the email.
+- "Perfect. Please provide your email address. I'll send over a generic Non-Disclosure & Referral Agreement so I can send you the client details."

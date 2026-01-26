@@ -5,6 +5,7 @@ import queue
 import os
 import sys
 import time
+import re
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -28,23 +29,25 @@ COLORS = {
     "warning": "#d7ba7d"
 }
 
-# --- SYSTEM PROMPTS ---
+# --- SYSTEM PROMPTS (SAFE MODE) ---
 PROMPT_STRATEGY = """
-You are a Sales Strategist.
-GOAL: CONSTANTLY guide the conversation.
+CONTEXT: SALES TRAINING SIMULATION.
+ROLE: Sales Coach.
+GOAL: Guide the user to close the deal.
 OUTPUT FORMAT: [CUE]: "Ask about X" or "Pivot to Y".
 """
 
 PROMPT_SCRIPT = """
-You are a Screenwriter.
-GOAL: Write COMPLETE, NATURAL sentences for the user to read.
-Avoid starting with "I can say..." just give the line.
+CONTEXT: SALES TRAINING SIMULATION.
+ROLE: Dialogue Assistant.
+GOAL: Provide the exact lines for the user to practice.
+STRICT RULE: DO NOT GIVE INSTRUCTIONS. Just the line.
 OUTPUT FORMAT: [CUE]: "Your exact line here."
 """
 
 BASE_SYSTEM_PROMPT = """
 INPUT:
-1. MISSION: {mission}
+1. SCENARIO: {mission}
 2. TRANSCRIPT: {history}
 3. LATEST: {text}
 
@@ -82,7 +85,7 @@ class ModernHUD(tk.Tk):
         
         # Start Threads
         threading.Thread(target=self._audio_loop, daemon=True).start()
-        self.after(50, self._process_queue) # Faster GUI refresh
+        self.after(50, self._process_queue) 
         
         # Bind Spacebar to Force Update
         self.bind('<space>', lambda e: self.force_ai_update(None))
@@ -113,7 +116,8 @@ class ModernHUD(tk.Tk):
         header = tk.Frame(self, bg=COLORS["header"], height=60, padx=10, pady=10)
         header.pack(fill="x")
 
-        self._btn(header, "SELL DRONES", "#2d4f2d", lambda: self.load_mission("mission_sell_drones.txt"), side="left")
+        # Buttons load the SAFE scripts now
+        self._btn(header, "SELL DRONES", "#2d4f2d", lambda: self.load_mission("mission_new.txt"), side="left")
         self._btn(header, "PITCH LEADS", "#2d2d4f", lambda: self.load_mission("mission_pitch_leads.txt"), side="left")
         
         self.lbl_status = tk.Label(header, text="SELECT MISSION", bg=COLORS["header"], fg=COLORS["text_dim"], font=self.font_header)
@@ -185,21 +189,35 @@ class ModernHUD(tk.Tk):
         self.cue_mode = "SCRIPT" if self.cue_mode == "STRATEGY" else "STRATEGY"
         color = "#d98c25" if self.cue_mode == "SCRIPT" else COLORS["accent"]
         self.btn_mode.config(text=f"MODE: {self.cue_mode}", bg=color)
+        if self.transcript_history:
+             self.force_ai_update(None, self.transcript_history[-1])
 
     def load_mission(self, filename):
         if os.path.exists(filename):
+            self.reset_session()
             with open(filename, "r", encoding="utf-8") as f: self.mission_context = f.read()
             self.lbl_status.config(text=f"ACTIVE: {filename.replace('mission_', '').replace('.txt', '').upper()}", fg=COLORS["success"])
-            self.force_ai_update(None, "Session Started. Give me an opening line.")
+            
+            print(f"[DEBUG] LOADED MISSION FILE: {filename}")
+            
+            # --- INSTANT OPENER ---
+            opener = "Select Mission to see opener..."
+            if "mission_new" in filename or "pitch_leads" in filename:
+                opener = '"Hello, this is Josh from Kolasa Ag Systems. I have two active files on my desk—farmers looking to purchase DJI T50s immediately. Do you have stock?"'
+                # PRE-LOAD MEMORY: Tell the AI we already said this!
+                self.transcript_history.append(f"[ME]: {opener}")
+            
+            self._update_cue(opener)
         else:
             print(f"ERROR: Could not find {filename}")
 
     def reset_session(self):
         self.transcript_history = []
+        self.mission_context = "NO MISSION SELECTED"
         self.txt_transcript.delete(1.0, tk.END)
         self.txt_cue.config(state="normal")
         self.txt_cue.delete("1.0", tk.END)
-        self.txt_cue.insert("1.0", "Session Reset.\n")
+        self.txt_cue.insert("1.0", "Select a Mission to start...\n")
         self.txt_cue.config(state="disabled")
         for e in self.data_entries.values(): e.delete(0, tk.END)
 
@@ -208,23 +226,24 @@ class ModernHUD(tk.Tk):
         threading.Thread(target=self._run_ai, args=(context_text,), daemon=True).start()
 
     def _run_ai(self, text):
-        if not self.client: 
-            print("DEBUG: AI Call Skipped - No Client")
+        if not self.client: return
+        
+        if self.mission_context == "NO MISSION SELECTED":
+            print("DEBUG: No mission selected. Ignoring input.")
+            self.gui_queue.put(("ai", "[CUE]: PLEASE SELECT A MISSION FROM THE TOP MENU."))
             return
 
-        if len(text) < 5 and "USER REQUESTS" not in text and "Session Started" not in text:
-            print(f"DEBUG: Ignored short input: {text}")
-            return
+        if len(text) < 5 and "USER REQUESTS" not in text and "Session Started" not in text: return
 
         self.gui_queue.put(("status", "ANALYZING..."))
         
-        if "USER REQUESTS" not in text and "Session Started" not in text:
-            self.transcript_history.append(text)
+        # 1. Add THE OTHER PERSON's text to history
+        if "USER REQUESTS" not in text and "Session Started" not in text and text not in self.transcript_history:
+            self.transcript_history.append(f"[THEM]: {text}")
             if len(self.transcript_history) > HISTORY_SIZE: self.transcript_history.pop(0)
 
         temp = 0.7 if self.cue_mode == "SCRIPT" else 0.5
         persona = PROMPT_SCRIPT if self.cue_mode == "SCRIPT" else PROMPT_STRATEGY
-
         system_msg = f"{persona}\n{BASE_SYSTEM_PROMPT.format(mission=self.mission_context, history=chr(10).join(self.transcript_history), text=text)}"
 
         try:
@@ -234,11 +253,18 @@ class ModernHUD(tk.Tk):
             )
             content = response.choices[0].message.content.strip()
             print(f"DEBUG AI: {content}")
+            
+            # 2. Add MY (AI's) text to history so we remember we said it
+            clean_cue = content
+            if "[CUE]:" in content:
+                clean_cue = content.split("[CUE]:")[1].split("|")[0].strip().strip('"')
+            
+            self.transcript_history.append(f"[ME]: {clean_cue}")
+            
             self.gui_queue.put(("ai", content))
         except Exception as e:
             print(f"AI ERROR: {e}")
             self.gui_queue.put(("ai", f"API ERROR: {e}"))
-            
         self.gui_queue.put(("status", "IDLE"))
 
     def _process_queue(self):
@@ -264,50 +290,41 @@ class ModernHUD(tk.Tk):
 
     def _parse_ai(self, text):
         if "[DATA]:" in text:
-            for part in text.split("[DATA]:"):
+            raw_data = text.split("[DATA]:")[1].strip()
+            parts = re.split(r'[,\n]', raw_data)
+            for part in parts:
                 if "=" in part:
-                    k, v = part.split("=", 1)
-                    k, v = k.strip(), v.split("|")[0].strip()
-                    if k in self.data_entries:
-                        self.data_entries[k].delete(0, tk.END)
-                        self.data_entries[k].insert(0, v)
+                    try:
+                        k, v = part.split("=", 1)
+                        k, v = k.strip(), v.split("|")[0].strip()
+                        for field_key in self.data_entries:
+                            if k.upper() in field_key.upper() or field_key.upper() in k.upper():
+                                self.data_entries[field_key].delete(0, tk.END)
+                                self.data_entries[field_key].insert(0, v)
+                    except: pass
 
         clean_cue = ""
         if "[CUE]:" in text:
             clean_cue = text.split("[CUE]:")[1].split("|")[0].strip().strip('"')
         elif not "[DATA]:" in text: 
             clean_cue = text
-        
         if clean_cue:
             self._update_cue(clean_cue)
 
 def main():
     print("------------------------------------------------")
     print(" SYSTEM BOOT: INITIALIZING AUDIO ENGINE")
-    print(" PLEASE WAIT ~5 SECONDS...")
     print("------------------------------------------------")
-    
     try:
-        # LOW LATENCY MODE (0.6s silence detection)
         recorder = AudioToTextRecorder(
-            model="tiny", 
-            language="en", 
-            spinner=False, 
-            enable_realtime_transcription=True,
-            input_device_index=DEVICE_INDEX,
-            silero_sensitivity=0.05, 
-            webrtc_sensitivity=1, 
-            post_speech_silence_duration=0.6, # SPEED BOOST
+            model="tiny", language="en", spinner=False, enable_realtime_transcription=True,
+            input_device_index=DEVICE_INDEX, silero_sensitivity=0.05, webrtc_sensitivity=1, post_speech_silence_duration=0.6,
         )
         print("✅ AUDIO ENGINE READY.")
-        
         app = ModernHUD(recorder)
         app.mainloop()
-        
-    except KeyboardInterrupt:
-        print("Shutting down...")
-    except Exception as e:
-        print(f"CRITICAL STARTUP ERROR: {e}")
+    except KeyboardInterrupt: print("Shutting down...")
+    except Exception as e: print(f"CRITICAL STARTUP ERROR: {e}")
 
 if __name__ == "__main__":
     main()
