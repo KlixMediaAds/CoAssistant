@@ -1,0 +1,10 @@
+MISSION: SELL_DRONES
+DATE: 2026-01-26 16:31:13.766646
+----------------------------------------
+[ME]: "Hi, this is Josh from Kolasa Ag Systems. I'm working with a few producers in your area to lower their fungicide application costs this season. Are you currently spraying by plane or ground rig?"
+[THEM]: Hello this is Seed Farms, we are currently spraying with ground rig.
+[ME]: Understood. The T50 is great for hitting fields when the ground is too wet for the high-clearance rig. It keeps you moving when the wheels can't turn.
+[THEM]: Okay?
+[ME]: I'm not a dealer, I'm a consultant. I help farmers find the best inventory and pricing.
+[THEM]: So what do you want?
+[ME]: I have a PDF breakdown that compares the T50 operating cost vs hiring a plane. Can I email that to you to look over?

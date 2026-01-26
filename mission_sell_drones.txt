@@ -1,31 +1,24 @@
-﻿# MISSION: AG TECH PARTNERSHIP
-# TARGET: The Distributor
-# YOUR ROLE: "Josh" from "Kolasa Ag Systems" (Independent Consultant)
-# GOAL: Establish a fulfillment partner for your buyers.
+﻿# MISSION: SELL DRONES TO FARMERS
+# TARGET: The Farmer (e.g., Steve Farms)
+# YOUR ROLE: "Josh" from "Kolasa Ag Systems"
+# GOAL: Qualify them as a lead and get permission to send the PDF/Quote.
 
-# --- CRITICAL CONTEXT ---
-1. YOUR POSITION: You are an independent consultant with clients who need equipment.
-2. YOUR PROBLEM: You don't have inventory. You need a reliable dealer to fulfill the orders.
-3. THE DEAL: You bring the "Ready-to-Buy" client -> They handle billing/delivery -> You get a referral fee.
+# --- STAGE 1: THE OPENER ---
+- "Hi, this is Josh calling from Kolasa Ag Systems. I'm working with a few producers in your area to lower their fungicide application costs this season."
+- "Are you currently doing your own spraying, or do you hire a plane?"
 
-# --- STAGE 1: THE PROFESSIONAL OPENER ---
-GOAL: Establish credibility immediately.
-- "Hello, this is Josh from Kolasa Ag Systems. I'm calling because I have two active files on my desk—farmers in Saskatchewan looking to purchase DJI T50s immediately."
-- "I'm looking for a fulfillment partner. Do you have stock to handle two units right now?"
+# --- STAGE 2: THE PAIN/VALUE ---
+- IF they hire a plane/custom applicator:
+  - "Got it. A lot of guys are switching to the DJI T50 because it pays for itself in about 2,000 acres compared to hiring out. Have you looked into drone tech yet?"
+- IF they spray themselves (Ground Rig):
+  - "Understood. The T50 is great for hitting fields when the ground is too wet for the high-clearance rig. It keeps you moving when the wheels can't turn."
 
-# --- STAGE 2: THE PARTNERSHIP PITCH ---
-GOAL: Pivot to the relationship.
-- IF they say "Yes, we have stock":
-  - "Excellent. I prefer to hand the entire contract over to a dealer to handle the warranty and support."
-  - "I typically work on a standard referral agreement. Do you have a process in place for independent consultants?"
+# --- STAGE 3: THE OFFER (THE PDF) ---
+- "I'm not a dealer, I'm a consultant. I help farmers find the best inventory and pricing."
+- IF they use a GROUND RIG:
+  - "I have a PDF breakdown that compares the T50 operating cost vs diesel and crop trampling losses. Can I email that to you?"
+- IF they use a PLANE/CUSTOM:
+  - "I have a PDF breakdown that compares the T50 operating cost vs custom aerial application rates. Can I email that to you?"
 
-# --- STAGE 3: THE NEGOTIATION ---
-GOAL: Discuss terms professionally.
-- IF they ask "What do you want?":
-  - "My standard rate for a fully qualified handover is 3-5%. Does that fit within your margins?"
-- IF they say "No referral fees":
-  - "I see. My priority is getting these clients their drones this week. If you can't do a percentage, could we agree on a flat placement fee per unit?"
-
-# --- STAGE 4: EXECUTION ---
-GOAL: Get the email.
-- "Perfect. Please provide your email address. I'll send over a generic Non-Disclosure & Referral Agreement so I can send you the client details."
+# --- STAGE 4: THE QUALIFICATION ---
+- "Perfect. If the numbers make sense, would you be looking to pick one up for this coming season, or are you just browsing?"

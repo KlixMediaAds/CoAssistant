@@ -1,0 +1,30 @@
+MISSION: SELL_DRONES
+DATE: 2026-01-26 16:45:05.277530
+----------------------------------------
+--- NOTEPAD ---
+• Notes will appear here...
+• Name: Steve Seed Farms
+
+3. PROVIDE CUE:
+   -
+• Name: Steve Seed Farms
+• Name: Steve Seed Farms
+• Name: Josh
+• Spraying Method: Plane
+• Name: Steve Seed Farms
+• Name: Steve Seed Farms
+----------------------------------------
+[ME]: "Hi, this is Josh from Kolasa Ag Systems. I'm working with a few producers in your area to lower their fungicide application costs this season. Are you currently spraying by plane or ground rig?"
+[THEM]: Hello, this is Steve Seed Farms.
+[ME]: Ask if they are currently spraying by plane or ground rig.
+[ME]: Are you currently doing your own spraying, or do you hire a plane?
+[THEM]: Sorry, who is this?
+[ME]: Hi, this is Josh from Kolasa Ag Systems. I'm working with a few producers in your area to lower their fungicide application costs this season. Are you currently doing your own spraying, or do you hire a plane?
+[THEM]: Who do you work for?
+[ME]: I work for Kolasa Ag Systems. We specialize in helping farmers like you find ways to reduce costs and improve efficiency with new technologies. Are you currently doing your own spraying, or do you hire a plane?
+[THEM]: We hire a plane.
+[ME]: Got it. A lot of guys are switching to the DJI T50 because it pays for itself in about 2,000 acres compared to hiring out. Have you looked into drone tech yet?
+[THEM]: I have, but I don't know much.
+[ME]: I understand. The T50 has been a game-changer for many farmers. I'm not a dealer, I'm a consultant, and I help farmers find the best inventory and pricing. I have a PDF breakdown that compares the T50 operating cost vs custom aerial application rates. Can I email that to you?
+[THEM]: Yes, email it to James at hoganfarmst.ca.
+[ME]: Perfect. If the numbers make sense, would you be looking to pick one up for this coming season, or are you just browsing?

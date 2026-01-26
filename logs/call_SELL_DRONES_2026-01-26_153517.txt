@@ -1,0 +1,6 @@
+MISSION: SELL_DRONES
+DATE: 2026-01-26 15:35:17.441206
+----------------------------------------
+[ME]: "Hello, this is Josh from Kolasa Ag Systems. I have two active files on my desk—farmers looking to purchase DJI T50s immediately. Do you have stock?"
+[THEM]: Hello, this is Seed Farms.
+[ME]: Hello, this is Josh from Kolasa Ag Systems. I'm calling because I have two active files on my desk—farmers in Saskatchewan looking to purchase DJI T50s immediately. I'm looking for a fulfillment partner. Do you have stock to handle two units right now?

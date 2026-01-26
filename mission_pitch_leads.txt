@@ -1,31 +1,20 @@
-﻿# MISSION: AG TECH PARTNERSHIP
-# TARGET: The Distributor
+﻿# MISSION: PITCH LEADS TO DEALERS
+# TARGET: The Distributor (e.g., Sky Drones)
 # YOUR ROLE: "Josh" from "Kolasa Ag Systems" (Independent Consultant)
 # GOAL: Establish a fulfillment partner for your buyers.
 
-# --- CRITICAL CONTEXT ---
-1. YOUR POSITION: You are an independent consultant with clients who need equipment.
-2. YOUR PROBLEM: You don't have inventory. You need a reliable dealer to fulfill the orders.
-3. THE DEAL: You bring the "Ready-to-Buy" client -> They handle billing/delivery -> You get a referral fee.
-
-# --- STAGE 1: THE PROFESSIONAL OPENER ---
-GOAL: Establish credibility immediately.
+# --- STAGE 1: THE OPENER ---
 - "Hello, this is Josh from Kolasa Ag Systems. I'm calling because I have two active files on my desk—farmers in Saskatchewan looking to purchase DJI T50s immediately."
 - "I'm looking for a fulfillment partner. Do you have stock to handle two units right now?"
 
 # --- STAGE 2: THE PARTNERSHIP PITCH ---
-GOAL: Pivot to the relationship.
 - IF they say "Yes, we have stock":
   - "Excellent. I prefer to hand the entire contract over to a dealer to handle the warranty and support."
   - "I typically work on a standard referral agreement. Do you have a process in place for independent consultants?"
 
 # --- STAGE 3: THE NEGOTIATION ---
-GOAL: Discuss terms professionally.
 - IF they ask "What do you want?":
   - "My standard rate for a fully qualified handover is 3-5%. Does that fit within your margins?"
-- IF they say "No referral fees":
-  - "I see. My priority is getting these clients their drones this week. If you can't do a percentage, could we agree on a flat placement fee per unit?"
 
 # --- STAGE 4: EXECUTION ---
-GOAL: Get the email.
 - "Perfect. Please provide your email address. I'll send over a generic Non-Disclosure & Referral Agreement so I can send you the client details."
