@@ -4,14 +4,15 @@ import threading
 import queue
 import os
 import sys
+import time
+from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 from RealtimeSTT import AudioToTextRecorder
-from datetime import datetime
 
 # --- CONFIGURATION ---
 load_dotenv()
-DEVICE_INDEX = int(os.getenv("DEVICE_INDEX", 11))
+DEVICE_INDEX = int(os.getenv("DEVICE_INDEX", 1))
 HISTORY_SIZE = 20
 
 # --- COLOR PALETTE ---
@@ -54,9 +55,10 @@ TASK:
 """
 
 class ModernHUD(tk.Tk):
-    def __init__(self):
+    def __init__(self, recorder):
         super().__init__()
-
+        
+        self.recorder = recorder
         self.title("KlixOS - Enterprise Orchestrator")
         self.geometry("1200x800")
         self.configure(bg=COLORS["bg"])
@@ -66,7 +68,6 @@ class ModernHUD(tk.Tk):
         self.mission_context = "NO MISSION SELECTED"
         self.cue_mode = "SCRIPT" 
         self.client = None
-        self.recorder = None
         self.gui_queue = queue.Queue()
         self.data_entries = {}
 
@@ -74,17 +75,38 @@ class ModernHUD(tk.Tk):
         self.font_header = font.Font(family="Segoe UI", size=12, weight="bold")
         self.font_main = font.Font(family="Segoe UI", size=10)
         self.font_mono = font.Font(family="Consolas", size=10)
-        self.font_cue = font.Font(family="Segoe UI", size=16, weight="bold")
+        self.font_cue = font.Font(family="Segoe UI", size=14, weight="bold")
 
-        self._init_ai()
         self._build_ui()
+        self._init_openai()
         
-        # Threads
-        threading.Thread(target=self._start_audio_engine, daemon=True).start()
-        self.after(100, self._process_queue)
+        # Start Threads
+        threading.Thread(target=self._audio_loop, daemon=True).start()
+        self.after(50, self._process_queue) # Faster GUI refresh
         
         # Bind Spacebar to Force Update
         self.bind('<space>', lambda e: self.force_ai_update(None))
+
+    def _init_openai(self):
+        key = os.getenv("OPENAI_API_KEY")
+        if key: 
+            self.client = OpenAI(api_key=key)
+            print("DEBUG: OpenAI Client Initialized.")
+        else:
+            self.gui_queue.put(("ai", "ERROR: NO OPENAI KEY FOUND IN .ENV"))
+
+    def _audio_loop(self):
+        print("DEBUG: Starting Audio Loop...")
+        while True:
+            try:
+                text = self.recorder.text()
+                if text.strip():
+                    print(f"DEBUG: Heard '{text}'")
+                    self.gui_queue.put(("final", text))
+                    self._run_ai(text)
+            except Exception as e:
+                print(f"Loop Error: {e}")
+                time.sleep(0.1)
 
     def _build_ui(self):
         # --- HEADER ---
@@ -126,9 +148,9 @@ class ModernHUD(tk.Tk):
         self.frm_cue.pack(fill="x", pady=(15, 0))
         self.frm_cue.pack_propagate(False)
 
-        tk.Label(self.frm_cue, text="AI ASSISTANT", bg=COLORS["panel"], fg=COLORS["accent"], font=("Segoe UI", 8)).pack(anchor="w")
+        tk.Label(self.frm_cue, text="AI STRATEGY & CUES", bg=COLORS["panel"], fg=COLORS["accent"], font=("Segoe UI", 8)).pack(anchor="w")
         
-        # Scrollbar Logic
+        # Scrollbar Logic for Cues
         cue_scroll = ttk.Scrollbar(self.frm_cue)
         cue_scroll.pack(side="right", fill="y")
 
@@ -138,7 +160,7 @@ class ModernHUD(tk.Tk):
         self.txt_cue.pack(side="left", fill="both", expand=True)
         cue_scroll.config(command=self.txt_cue.yview)
 
-        self.txt_cue.insert("1.0", "Select a Mission to start...")
+        self.txt_cue.insert("1.0", "Select a Mission to start...\n")
         self.txt_cue.config(state="disabled")
 
         # Right Column
@@ -169,42 +191,28 @@ class ModernHUD(tk.Tk):
             with open(filename, "r", encoding="utf-8") as f: self.mission_context = f.read()
             self.lbl_status.config(text=f"ACTIVE: {filename.replace('mission_', '').replace('.txt', '').upper()}", fg=COLORS["success"])
             self.force_ai_update(None, "Session Started. Give me an opening line.")
+        else:
+            print(f"ERROR: Could not find {filename}")
 
     def reset_session(self):
         self.transcript_history = []
         self.txt_transcript.delete(1.0, tk.END)
-        self._update_cue("Session Reset.")
+        self.txt_cue.config(state="normal")
+        self.txt_cue.delete("1.0", tk.END)
+        self.txt_cue.insert("1.0", "Session Reset.\n")
+        self.txt_cue.config(state="disabled")
         for e in self.data_entries.values(): e.delete(0, tk.END)
-
-    def _init_ai(self):
-        key = os.getenv("OPENAI_API_KEY")
-        if key: self.client = OpenAI(api_key=key)
-
-    def _start_audio_engine(self):
-        try:
-            self.recorder = AudioToTextRecorder(
-                model="tiny", language="en", spinner=False, enable_realtime_transcription=True,
-                on_realtime_transcription_update=lambda t: self.gui_queue.put(("realtime", t)),
-                input_device_index=DEVICE_INDEX,
-                # INCREASED SILENCE DURATION TO 1.2s to prevent cutting sentences in half
-                silero_sensitivity=0.05, webrtc_sensitivity=3, post_speech_silence_duration=1.2,
-            )
-            while True:
-                text = self.recorder.text()
-                if text.strip():
-                    self.gui_queue.put(("final", text))
-                    self._run_ai(text)
-        except Exception as e: print(e)
 
     def force_ai_update(self, event, override_text=None):
         context_text = override_text if override_text else "USER REQUESTS IMMEDIATE ADVICE."
         threading.Thread(target=self._run_ai, args=(context_text,), daemon=True).start()
 
     def _run_ai(self, text):
-        if not self.client: return
+        if not self.client: 
+            print("DEBUG: AI Call Skipped - No Client")
+            return
 
-        # FILTER: Ignore short noises (< 15 chars) unless it's a forced update
-        if len(text) < 15 and "USER REQUESTS" not in text and "Session Started" not in text:
+        if len(text) < 5 and "USER REQUESTS" not in text and "Session Started" not in text:
             print(f"DEBUG: Ignored short input: {text}")
             return
 
@@ -220,13 +228,17 @@ class ModernHUD(tk.Tk):
         system_msg = f"{persona}\n{BASE_SYSTEM_PROMPT.format(mission=self.mission_context, history=chr(10).join(self.transcript_history), text=text)}"
 
         try:
+            print("DEBUG: Sending to AI...")
             response = self.client.chat.completions.create(
                 model="gpt-4o", messages=[{"role": "system", "content": system_msg}], temperature=temp, max_tokens=150
             )
             content = response.choices[0].message.content.strip()
             print(f"DEBUG AI: {content}")
             self.gui_queue.put(("ai", content))
-        except: pass
+        except Exception as e:
+            print(f"AI ERROR: {e}")
+            self.gui_queue.put(("ai", f"API ERROR: {e}"))
+            
         self.gui_queue.put(("status", "IDLE"))
 
     def _process_queue(self):
@@ -241,12 +253,13 @@ class ModernHUD(tk.Tk):
                 elif msg_type == "status":
                     self.lbl_ai_status.config(text=f"AI: {content}", fg=COLORS["warning"] if content == "ANALYZING..." else COLORS["text_dim"])
         except queue.Empty: pass
-        self.after(100, self._process_queue)
+        self.after(50, self._process_queue)
 
     def _update_cue(self, text):
+        timestamp = datetime.now().strftime("%H:%M:%S")
         self.txt_cue.config(state="normal")
-        self.txt_cue.delete("1.0", tk.END)
-        self.txt_cue.insert("1.0", text)
+        self.txt_cue.insert(tk.END, f"\n[{timestamp}] {text}\n")
+        self.txt_cue.see(tk.END)
         self.txt_cue.config(state="disabled")
 
     def _parse_ai(self, text):
@@ -268,6 +281,33 @@ class ModernHUD(tk.Tk):
         if clean_cue:
             self._update_cue(clean_cue)
 
+def main():
+    print("------------------------------------------------")
+    print(" SYSTEM BOOT: INITIALIZING AUDIO ENGINE")
+    print(" PLEASE WAIT ~5 SECONDS...")
+    print("------------------------------------------------")
+    
+    try:
+        # LOW LATENCY MODE (0.6s silence detection)
+        recorder = AudioToTextRecorder(
+            model="tiny", 
+            language="en", 
+            spinner=False, 
+            enable_realtime_transcription=True,
+            input_device_index=DEVICE_INDEX,
+            silero_sensitivity=0.05, 
+            webrtc_sensitivity=1, 
+            post_speech_silence_duration=0.6, # SPEED BOOST
+        )
+        print("✅ AUDIO ENGINE READY.")
+        
+        app = ModernHUD(recorder)
+        app.mainloop()
+        
+    except KeyboardInterrupt:
+        print("Shutting down...")
+    except Exception as e:
+        print(f"CRITICAL STARTUP ERROR: {e}")
+
 if __name__ == "__main__":
-    app = ModernHUD()
-    app.mainloop()
+    main()
