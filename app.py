@@ -3,7 +3,6 @@ from tkinter import ttk, font, simpledialog, messagebox
 import threading
 import queue
 import os
-import sys
 import time
 import re
 from datetime import datetime
@@ -11,8 +10,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from RealtimeSTT import AudioToTextRecorder
 import styles
-import pyaudio
-import psycopg2 
+import backend  # <--- IMPORTING YOUR ENGINE
 
 # --- CONFIGURATION ---
 load_dotenv()
@@ -22,147 +20,25 @@ LOG_DIR = "logs"
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
-# --- PRE-FLIGHT CHECKS ---
-def ensure_api_key():
-    key = os.getenv("OPENAI_API_KEY")
-    if not key:
-        print("⚠️ API KEY MISSING: Launching Setup Wizard...")
-        root = tk.Tk()
-        root.withdraw()
-        user_input = simpledialog.askstring("KlixOS Setup", "OpenAI API Key is missing.\n\nPlease paste it here:")
-        root.destroy()
-        
-        if user_input and user_input.startswith("sk-"):
-            with open(".env", "a") as f:
-                f.write(f"\nOPENAI_API_KEY={user_input.strip()}")
-            os.environ["OPENAI_API_KEY"] = user_input.strip()
-            print("✅ SUCCESS: API Key saved.")
-            return True
-        else:
-            print("❌ SETUP CANCELLED.")
-            return False
-    return True
-
-def get_smart_mic_index():
-    target_name = os.getenv("MIC_NAME", "Voicemeeter") 
-    p = pyaudio.PyAudio()
-    
-    print(f"DEBUG: Searching for microphone matching '{target_name}'...")
-    candidates = []
-    
-    for i in range(p.get_device_count()):
-        try:
-            info = p.get_device_info_by_index(i)
-            if info['maxInputChannels'] > 0:
-                name = info['name']
-                if target_name.lower() in name.lower():
-                    candidates.append((i, name))
-        except: pass
-    p.terminate()
-
-    if not candidates:
-        print("⚠️ No matching mic found. Using default index 1.")
-        return 1
-
-    best_index = candidates[0][0]
-    best_name = candidates[0][1]
-
-    for idx, name in candidates:
-        if "B1" in name:
-            best_index = idx
-            best_name = name
-            break
-        elif "Output" in name and "Aux" not in name:
-            best_index = idx
-            best_name = name
-    
-    print(f"✅ AUTO-DETECT: Selected '{best_name}' at Index {best_index}")
-    return best_index
-
-# --- DATABASE ENGINE ---
-def save_call_to_neon(mission, transcript, notes, client_email, client_name, status):
-    # 1. Check for URL
-    db_url = os.getenv("DATABASE_URL")
-    
-    if not db_url:
-        root = tk.Tk()
-        root.withdraw()
-        user_input = simpledialog.askstring("Database Setup", "Database URL is missing.\n\nPaste your NeonDB Connection String here:")
-        root.destroy()
-        if user_input and "postgres" in user_input:
-            try:
-                with open(".env", "a") as f: f.write(f"\nDATABASE_URL={user_input.strip()}")
-                os.environ["DATABASE_URL"] = user_input.strip()
-                db_url = user_input.strip()
-            except Exception as e: return False, f"Could not save .env: {str(e)}"
-        else: return False, "No Database URL provided."
-
-    # 3. Connect & Save
-    try:
-        conn = psycopg2.connect(db_url)
-        cur = conn.cursor()
-        
-        # UPSERT LEAD
-        lead_id = None
-        if client_email:
-            cur.execute("SELECT id FROM leads WHERE email = %s", (client_email,))
-            res = cur.fetchone()
-            if res:
-                lead_id = res[0]
-                # Update status and name
-                cur.execute("UPDATE leads SET name = %s, status = %s, updated_at = NOW() WHERE id = %s", (client_name, status, lead_id))
-            else:
-                cur.execute(
-                    "INSERT INTO leads (name, email, status, created_at) VALUES (%s, %s, %s, NOW()) RETURNING id",
-                    (client_name or "Unknown Lead", client_email, status)
-                )
-                lead_id = cur.fetchone()[0]
-        else:
-            cur.execute("INSERT INTO leads (name, status, created_at) VALUES ('Anonymous Caller', %s, NOW()) RETURNING id", (status,))
-            lead_id = cur.fetchone()[0]
-
-        # INSERT CALL
-        ai_summary = "\n".join(notes)
-        cur.execute("""
-            INSERT INTO calls (lead_id, mission_name, transcript, ai_summary, call_date)
-            VALUES (%s, %s, %s, %s, NOW())
-        """, (lead_id, mission, transcript, ai_summary))
-        
-        conn.commit()
-        cur.close()
-        conn.close()
-        return True, "Saved"
-        
-    except Exception as e:
-        return False, str(e)
-
-# --- SYSTEM PROMPTS ---
-PROMPT_STRATEGY = "CONTEXT: SALES SIMULATION. ROLE: Coach. OUTPUT: [CUE]: Advice."
-PROMPT_SCRIPT = "CONTEXT: SALES SIMULATION. ROLE: Assistant. OUTPUT: [CUE]: Exact line."
-BASE_SYSTEM_PROMPT = "ANALYZE: {mission}\nHISTORY: {history}\nINPUT: {text}\nTASK: Extract [NOTE]: Key: Value. Provide [CUE]: Advice."
-
 # --- CUSTOM DIALOGS ---
 class SaveLeadDialog(tk.Toplevel):
     def __init__(self, parent, default_name, default_email, callback):
         super().__init__(parent)
         self.callback = callback
         self.title("Save Lead Data")
-        self.geometry("400x300")
+        self.geometry("400x350")
         self.config(bg="#1e1e1e")
-        self.transient(parent) # Keep on top of parent
-        self.grab_set() # Modal behavior (disable main window)
+        self.transient(parent)
+        self.grab_set()
         
-        # Center the window
         x = parent.winfo_x() + (parent.winfo_width() // 2) - 200
-        y = parent.winfo_y() + (parent.winfo_height() // 2) - 150
+        y = parent.winfo_y() + (parent.winfo_height() // 2) - 175
         self.geometry(f"+{x}+{y}")
 
-        # Styles
         lbl_style = {"bg": "#1e1e1e", "fg": "white", "font": ("Segoe UI", 10)}
         entry_bg = "#333333"
         entry_fg = "white"
 
-        # Form
         tk.Label(self, text="LEAD NAME / BUSINESS", **lbl_style).pack(anchor="w", padx=20, pady=(20, 5))
         self.ent_name = tk.Entry(self, bg=entry_bg, fg=entry_fg, relief="flat", font=("Segoe UI", 11))
         self.ent_name.pack(fill="x", padx=20)
@@ -178,14 +54,10 @@ class SaveLeadDialog(tk.Toplevel):
         self.cmb_status = ttk.Combobox(self, textvariable=self.status_var, values=["INTERESTED", "NOT INTERESTED", "CALLBACK", "CLOSED WON", "BAD DATA"], state="readonly")
         self.cmb_status.pack(fill="x", padx=20)
 
-        # Buttons
         btn_frame = tk.Frame(self, bg="#1e1e1e")
         btn_frame.pack(pady=30)
-
         tk.Button(btn_frame, text="CANCEL", bg="#555", fg="white", font=("Segoe UI", 10, "bold"), relief="flat", padx=15, pady=5, command=self.destroy).pack(side="left", padx=10)
         tk.Button(btn_frame, text="SAVE RECORD", bg="#4ec9b0", fg="white", font=("Segoe UI", 10, "bold"), relief="flat", padx=15, pady=5, command=self.save).pack(side="left", padx=10)
-        
-        # Focus name
         self.ent_name.focus_set()
 
     def save(self):
@@ -193,6 +65,39 @@ class SaveLeadDialog(tk.Toplevel):
         email = self.ent_email.get().strip()
         status = self.status_var.get()
         self.callback(name, email, status)
+        self.destroy()
+
+class ContextDialog(tk.Toplevel):
+    def __init__(self, parent, current_text, callback):
+        super().__init__(parent)
+        self.callback = callback
+        self.title("Mission Briefing / Context")
+        self.geometry("600x400")
+        self.config(bg="#1e1e1e")
+        self.transient(parent)
+        
+        x = parent.winfo_x() + (parent.winfo_width() // 2) - 300
+        y = parent.winfo_y() + (parent.winfo_height() // 2) - 200
+        self.geometry(f"+{x}+{y}")
+
+        tk.Label(self, text="PASTE LEAD DATA / WEBSITE INFO / NOTES:", bg="#1e1e1e", fg="#4ec9b0", font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=20, pady=(20, 5))
+        
+        self.txt_input = tk.Text(self, bg="#333", fg="white", font=("Segoe UI", 10), height=15, relief="flat", padx=10, pady=10)
+        self.txt_input.pack(fill="both", expand=True, padx=20, pady=5)
+        self.txt_input.insert("1.0", current_text)
+
+        btn_frame = tk.Frame(self, bg="#1e1e1e")
+        btn_frame.pack(pady=20)
+        tk.Button(btn_frame, text="CLEAR", bg="#d9534f", fg="white", font=("Segoe UI", 10), relief="flat", padx=15, pady=5, command=self.clear).pack(side="left", padx=10)
+        tk.Button(btn_frame, text="SAVE CONTEXT", bg="#4ec9b0", fg="white", font=("Segoe UI", 10, "bold"), relief="flat", padx=15, pady=5, command=self.save).pack(side="left", padx=10)
+        self.txt_input.focus_set()
+
+    def clear(self):
+        self.txt_input.delete("1.0", tk.END)
+
+    def save(self):
+        text = self.txt_input.get("1.0", tk.END).strip()
+        self.callback(text)
         self.destroy()
 
 # --- CUSTOM WIDGETS ---
@@ -226,6 +131,7 @@ class ModernHUD(tk.Tk):
         self.mission_context = "NO MISSION SELECTED"
         self.cue_mode = "SCRIPT"
         self.unique_notes = set()
+        self.lead_data_context = "" 
         
         self.client = None
         self.gui_queue = queue.Queue()
@@ -260,6 +166,9 @@ class ModernHUD(tk.Tk):
         self.btn_missions = tk.Button(self.header, text="  MISSIONS ▾  ", font=self.font_header, relief="flat", padx=10, pady=5, command=self.show_mission_menu)
         self.btn_missions.pack(side="left", padx=5)
         
+        self.btn_context = tk.Button(self.header, text="CONTEXT 📝", font=self.font_header, relief="flat", bg="#333", fg="white", padx=10, pady=5, command=self.open_context_dialog)
+        self.btn_context.pack(side="left", padx=5)
+
         self.menu_missions = tk.Menu(self, tearoff=0)
         self.menu_missions.add_command(label="SELL DRONES", command=lambda: self.load_mission("mission_sell_drones.txt"))
         self.menu_missions.add_command(label="PITCH LEADS", command=lambda: self.load_mission("mission_pitch_leads.txt"))
@@ -267,14 +176,10 @@ class ModernHUD(tk.Tk):
         self.lbl_status = tk.Label(self.header, text="SELECT MISSION", font=self.font_header)
         self.lbl_status.pack(side="left", padx=20)
         
-        self.btn_theme = tk.Button(self.header, text="☀️", bg=styles.SHARED["warning"], fg="white", 
-                                   font=("Segoe UI Emoji", 12), relief="flat", padx=10, pady=0, borderwidth=0, 
-                                   command=self.toggle_theme)
+        self.btn_theme = tk.Button(self.header, text="☀️", bg=styles.SHARED["warning"], fg="white", font=("Segoe UI Emoji", 12), relief="flat", padx=10, pady=0, borderwidth=0, command=self.toggle_theme)
         self.btn_theme.pack(side="right", padx=5)
-
         self._btn(self.header, "SAVE DB", styles.SHARED["success"], self.open_save_dialog, side="right")
         self._btn(self.header, "RESET", styles.SHARED["danger"], self.reset_session, side="right")
-        
         self.btn_mode = tk.Button(self.header, text=f"MODE: {self.cue_mode}", font=self.font_header, relief="flat", padx=15, pady=2, command=self.toggle_mode)
         self.btn_mode.pack(side="right", padx=10)
 
@@ -287,19 +192,15 @@ class ModernHUD(tk.Tk):
         self.frm_transcript_container = tk.Frame(self.left_col, height=200) 
         self.frm_transcript_container.pack(side="bottom", fill="x", pady=(15, 0))
         self.frm_transcript_container.pack_propagate(False) 
-
         self.lbl_trans = tk.Label(self.frm_transcript_container, text="LIVE TRANSCRIPT", fg=styles.SHARED["accent"], font=("Segoe UI", 9, "bold"))
         self.lbl_trans.pack(anchor="w")
-        
         self.txt_transcript = DarkScrolledText(self.frm_transcript_container, font=self.font_ui_text, height=12, padx=15, pady=10)
         self.txt_transcript.pack(fill="both", expand=True)
 
         self.frm_cues_container = tk.Frame(self.left_col)
         self.frm_cues_container.pack(side="top", fill="both", expand=True)
-        
         self.lbl_cues = tk.Label(self.frm_cues_container, text="AI STRATEGY & CUES", fg=styles.SHARED["accent"], font=self.font_header)
         self.lbl_cues.pack(anchor="w", pady=(0, 5))
-        
         self.txt_cue = DarkScrolledText(self.frm_cues_container, font=self.font_cue, padx=15, pady=15)
         self.txt_cue.pack(fill="both", expand=True)
         self.txt_cue.tag_config("dim", font=self.font_timestamp)
@@ -307,7 +208,6 @@ class ModernHUD(tk.Tk):
         self.right_col = tk.Frame(self.body, width=350, padx=10, pady=15)
         self.right_col.pack(side="right", fill="y")
         self.right_col.pack_propagate(False)
-        
         tk.Label(self.right_col, text="LIVE NOTEPAD", fg=styles.SHARED["success"], font=self.font_header).pack(anchor="w", pady=(0, 10))
         self.txt_notepad = DarkScrolledText(self.right_col, font=self.font_mono, padx=10, pady=10)
         self.txt_notepad.pack(fill="both", expand=True)
@@ -328,7 +228,6 @@ class ModernHUD(tk.Tk):
     def apply_theme(self, theme_name, animate=False):
         self.current_theme = theme_name
         target = styles.THEMES[theme_name]
-        
         def interpolate(c1, c2, t):
             r1, g1, b1 = int(c1[1:3],16), int(c1[3:5],16), int(c1[5:7],16)
             r2, g2, b2 = int(c2[1:3],16), int(c2[3:5],16), int(c2[5:7],16)
@@ -336,7 +235,6 @@ class ModernHUD(tk.Tk):
             g = int(g1 + (g2-g1)*t)
             b = int(b1 + (b2-b1)*t)
             return f"#{r:02x}{g:02x}{b:02x}"
-
         def update_colors(palette):
             self.configure(bg=palette["bg"])
             self.header.config(bg=palette["header"])
@@ -344,10 +242,7 @@ class ModernHUD(tk.Tk):
             self.left_col.config(bg=palette["bg"])
             for widget in [self.txt_transcript, self.txt_notepad, self.txt_cue]:
                 widget.config(bg=palette["panel"]) 
-                widget.text.config(bg=palette["panel"], fg=palette["text"], 
-                                   insertbackground=palette["text"],
-                                   highlightbackground=palette["border"], 
-                                   highlightcolor=palette["border"])
+                widget.text.config(bg=palette["panel"], fg=palette["text"], insertbackground=palette["text"], highlightbackground=palette["border"], highlightcolor=palette["border"])
             self.btn_theme.config(text=palette["icon"])
             for lbl in [self.lbl_status, self.lbl_trans, self.lbl_cues]:
                 bg_col = palette["header"] if lbl in self.header.winfo_children() else palette["bg"]
@@ -364,7 +259,7 @@ class ModernHUD(tk.Tk):
             self.style.configure("Vertical.TScrollbar", background=palette["scroll_fg"], troughcolor=palette["scroll_bg"], bordercolor=palette["scroll_bg"])
             self.txt_cue.tag_config("dim", foreground=palette["text_dim"])
             self.txt_notepad.tag_config("key_bold", foreground=styles.SHARED["key_highlight"] if theme_name == "dark" else "#0055bb")
-
+            
         if not animate:
             update_colors(target)
         else:
@@ -382,24 +277,8 @@ class ModernHUD(tk.Tk):
             step_anim(0)
 
     def _init_openai_robust(self):
-        key = os.getenv("OPENAI_API_KEY")
-        if not key:
-            print("⚠️ API KEY MISSING: Launching Setup Wizard...")
-            user_input = simpledialog.askstring("KlixOS Setup", "OpenAI API Key is missing.\n\nPlease paste it here to save it permanently:")
-            if user_input and user_input.startswith("sk-"):
-                try:
-                    with open(".env", "a") as f:
-                        f.write(f"\nOPENAI_API_KEY={user_input.strip()}")
-                    os.environ["OPENAI_API_KEY"] = user_input.strip()
-                    key = user_input.strip()
-                    print("✅ SUCCESS: API Key saved to .env")
-                except Exception as e:
-                    messagebox.showerror("Error", f"Could not save .env file: {e}")
-            else:
-                print("❌ SETUP CANCELLED.")
-        
-        if key: 
-            self.client = OpenAI(api_key=key)
+        if backend.ensure_api_key():
+            self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             print("DEBUG: OpenAI Client Initialized.")
         else:
             print("CRITICAL ERROR: Still no API Key. AI features disabled.")
@@ -413,7 +292,8 @@ class ModernHUD(tk.Tk):
                 if text.strip():
                     print(f"\n[USER]: {text}") 
                     self.gui_queue.put(("final", text))
-                    self._run_ai(text)
+                    # --- THREADED AI CALL ---
+                    threading.Thread(target=self._run_ai, args=(text,), daemon=True).start()
             except: time.sleep(0.1)
 
     def _process_queue(self):
@@ -437,11 +317,25 @@ class ModernHUD(tk.Tk):
             self.active_mission_name = filename.replace('mission_', '').replace('.txt', '').upper()
             with open(filename, "r", encoding="utf-8") as f: self.mission_context = f.read()
             self.lbl_status.config(text=f"ACTIVE: {self.active_mission_name}", fg=styles.SHARED["success"])
-            opener = "Select Mission..."
-            if "sell_drones" in filename: opener = '"Hi, this is Josh from Kolasa Ag Systems..."'
-            elif "pitch_leads" in filename: opener = '"Hello, this is Josh from Kolasa Ag Systems..."'
+            
+            if self.lead_data_context.strip():
+                opener = "[AI ANALYZING DOSSIER FOR CUSTOM OPENER... PRESS SPACE]"
+            else:
+                opener = "Select Mission... (Or add Context)"
+                if "sell_drones" in filename: opener = '"Hi, this is Josh from Kolasa Ag Systems..."'
+            
             self._update_cue(opener)
             self.transcript_history.append(f"[ME]: {opener}")
+
+    def open_context_dialog(self):
+        ContextDialog(self, self.lead_data_context, self.save_context_data)
+
+    def save_context_data(self, text):
+        self.lead_data_context = text
+        if text:
+            self.btn_context.config(fg=styles.SHARED["success"], text="CONTEXT ✅")
+        else:
+            self.btn_context.config(fg="white", text="CONTEXT 📝")
 
     def reset_session(self):
         self.transcript_history = []
@@ -452,36 +346,29 @@ class ModernHUD(tk.Tk):
         self.txt_transcript.delete(1.0, tk.END)
         self.txt_cue.delete(1.0, tk.END); self.txt_cue.insert("1.0", "Select a Mission to start...\n")
         self.txt_notepad.delete("1.0", tk.END); self.txt_notepad.insert("1.0", "• Notes will appear here...\n")
+        self.lead_data_context = ""
+        self.btn_context.config(fg="white", text="CONTEXT 📝")
 
     def open_save_dialog(self):
-        # 1. Gather Data
         transcript = self.txt_transcript.get("1.0", tk.END).strip()
         if not transcript:
             messagebox.showinfo("Empty", "Nothing to save yet.")
             return
-
-        # 2. Try to find Email/Name in Notepad
         found_email = ""
         found_name = ""
         for note in self.unique_notes:
             if "email:" in note.lower(): found_email = note.split(":", 1)[1].strip()
             if "name:" in note.lower() and "mission" not in note.lower(): found_name = note.split(":", 1)[1].strip()
-
-        # 3. Launch Custom Dialog
         SaveLeadDialog(self, found_name, found_email, self.perform_db_save)
 
     def perform_db_save(self, name, email, status):
         transcript = self.txt_transcript.get("1.0", tk.END).strip()
-        success, msg = save_call_to_neon(self.active_mission_name, transcript, self.unique_notes, email, name, status)
-        
+        success, msg = backend.save_call_to_neon(self.active_mission_name, transcript, self.unique_notes, email, name, status)
         if success:
-            # Subtle feedback in UI
             self.lbl_status.config(text=f"SAVED: {name}", fg=styles.SHARED["success"])
             print(f"✅ DB SUCCESS: Saved lead '{name}' as '{status}'")
-            # Clear status after 3 seconds
             self.after(3000, lambda: self.lbl_status.config(text=f"ACTIVE: {self.active_mission_name}"))
-        else:
-            messagebox.showerror("Database Error", msg)
+        else: messagebox.showerror("Database Error", msg)
 
     def on_close(self): self.destroy()
 
@@ -494,20 +381,31 @@ class ModernHUD(tk.Tk):
 
     def _run_ai(self, text):
         if not self.client: return
+        print(f"DEBUG: AI Called for input: '{text}'") 
+
         if self.mission_context == "NO MISSION SELECTED":
             print("⚠️ IGNORED: No Mission Selected.")
             self.gui_queue.put(("ai", "[CUE]: PLEASE SELECT A MISSION FROM THE MENU."))
             return
+
         self.gui_queue.put(("ai", "[ANALYZING...]"))
         self.transcript_history.append(f"[THEM]: {text}")
         if len(self.transcript_history) > HISTORY_SIZE: self.transcript_history.pop(0)
-        sys_msg = f"{PROMPT_SCRIPT if self.cue_mode == 'SCRIPT' else PROMPT_STRATEGY}\n{BASE_SYSTEM_PROMPT.format(mission=self.mission_context, history=chr(10).join(self.transcript_history), text=text)}"
+
+        # INJECT CONTEXT
+        lead_data = self.lead_data_context if self.lead_data_context else "No prior context provided."
+        
+        # --- FIXED NAMESPACE REFERENCES HERE ---
+        sys_msg = f"{backend.PROMPT_SCRIPT if self.cue_mode == 'SCRIPT' else backend.PROMPT_STRATEGY}\n{backend.BASE_SYSTEM_PROMPT.format(mission=self.mission_context, lead_data=lead_data, history=chr(10).join(self.transcript_history), text=text)}"
+        
         try:
             resp = self.client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": sys_msg}], temperature=0.6)
             content = resp.choices[0].message.content.strip()
             print(f"[AI]: {content}\n")
             self.gui_queue.put(("ai", content))
-        except Exception as e: self.gui_queue.put(("ai", f"ERROR: {e}"))
+        except Exception as e: 
+            print(f"AI ERROR: {e}")
+            self.gui_queue.put(("ai", f"ERROR: {e}"))
 
     def _parse_ai(self, text):
         if "[NOTE]:" in text:
@@ -525,10 +423,10 @@ class ModernHUD(tk.Tk):
             self._update_cue(text.split("[CUE]:")[1].split("|")[0].strip().strip('"'))
 
 if __name__ == "__main__":
-    if ensure_api_key():
-        try:
-            mic_idx = get_smart_mic_index()
+    try:
+        if backend.ensure_api_key():
+            mic_idx = backend.get_smart_mic_index()
             recorder = AudioToTextRecorder(model="tiny", language="en", spinner=False, enable_realtime_transcription=True, input_device_index=mic_idx)
             print("✅ AUDIO ENGINE READY.")
             ModernHUD(recorder).mainloop()
-        except Exception as e: print(f"CRITICAL ERROR: {e}")
+    except Exception as e: print(f"CRITICAL ERROR: {e}")
