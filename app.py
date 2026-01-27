@@ -24,7 +24,6 @@ if not os.path.exists(LOG_DIR):
 
 # --- PRE-FLIGHT CHECKS ---
 def ensure_api_key():
-    """Checks for API key at startup."""
     key = os.getenv("OPENAI_API_KEY")
     if not key:
         print("⚠️ API KEY MISSING: Launching Setup Wizard...")
@@ -81,28 +80,22 @@ def get_smart_mic_index():
     return best_index
 
 # --- DATABASE ENGINE ---
-def save_call_to_neon(mission, transcript, notes, client_email=None, client_name=None):
+def save_call_to_neon(mission, transcript, notes, client_email, client_name, status):
     # 1. Check for URL
     db_url = os.getenv("DATABASE_URL")
     
-    # 2. Self-Healing: If missing, ask user
     if not db_url:
         root = tk.Tk()
-        root.withdraw() # Hide main window
+        root.withdraw()
         user_input = simpledialog.askstring("Database Setup", "Database URL is missing.\n\nPaste your NeonDB Connection String here:")
         root.destroy()
-        
         if user_input and "postgres" in user_input:
-            # Save to .env
             try:
-                with open(".env", "a") as f:
-                    f.write(f"\nDATABASE_URL={user_input.strip()}")
-                os.environ["DATABASE_URL"] = user_input.strip() # Update memory
+                with open(".env", "a") as f: f.write(f"\nDATABASE_URL={user_input.strip()}")
+                os.environ["DATABASE_URL"] = user_input.strip()
                 db_url = user_input.strip()
-            except Exception as e:
-                return False, f"Could not save .env: {str(e)}"
-        else:
-            return False, "No Database URL provided."
+            except Exception as e: return False, f"Could not save .env: {str(e)}"
+        else: return False, "No Database URL provided."
 
     # 3. Connect & Save
     try:
@@ -116,16 +109,16 @@ def save_call_to_neon(mission, transcript, notes, client_email=None, client_name
             res = cur.fetchone()
             if res:
                 lead_id = res[0]
-                if client_name:
-                    cur.execute("UPDATE leads SET name = %s, updated_at = NOW() WHERE id = %s", (client_name, lead_id))
+                # Update status and name
+                cur.execute("UPDATE leads SET name = %s, status = %s, updated_at = NOW() WHERE id = %s", (client_name, status, lead_id))
             else:
                 cur.execute(
-                    "INSERT INTO leads (name, email, created_at) VALUES (%s, %s, NOW()) RETURNING id",
-                    (client_name or "Unknown Lead", client_email)
+                    "INSERT INTO leads (name, email, status, created_at) VALUES (%s, %s, %s, NOW()) RETURNING id",
+                    (client_name or "Unknown Lead", client_email, status)
                 )
                 lead_id = cur.fetchone()[0]
         else:
-            cur.execute("INSERT INTO leads (name, created_at) VALUES ('Anonymous Caller', NOW()) RETURNING id")
+            cur.execute("INSERT INTO leads (name, status, created_at) VALUES ('Anonymous Caller', %s, NOW()) RETURNING id", (status,))
             lead_id = cur.fetchone()[0]
 
         # INSERT CALL
@@ -138,7 +131,7 @@ def save_call_to_neon(mission, transcript, notes, client_email=None, client_name
         conn.commit()
         cur.close()
         conn.close()
-        return True, "Saved to NeonDB!"
+        return True, "Saved"
         
     except Exception as e:
         return False, str(e)
@@ -148,15 +141,67 @@ PROMPT_STRATEGY = "CONTEXT: SALES SIMULATION. ROLE: Coach. OUTPUT: [CUE]: Advice
 PROMPT_SCRIPT = "CONTEXT: SALES SIMULATION. ROLE: Assistant. OUTPUT: [CUE]: Exact line."
 BASE_SYSTEM_PROMPT = "ANALYZE: {mission}\nHISTORY: {history}\nINPUT: {text}\nTASK: Extract [NOTE]: Key: Value. Provide [CUE]: Advice."
 
+# --- CUSTOM DIALOGS ---
+class SaveLeadDialog(tk.Toplevel):
+    def __init__(self, parent, default_name, default_email, callback):
+        super().__init__(parent)
+        self.callback = callback
+        self.title("Save Lead Data")
+        self.geometry("400x300")
+        self.config(bg="#1e1e1e")
+        self.transient(parent) # Keep on top of parent
+        self.grab_set() # Modal behavior (disable main window)
+        
+        # Center the window
+        x = parent.winfo_x() + (parent.winfo_width() // 2) - 200
+        y = parent.winfo_y() + (parent.winfo_height() // 2) - 150
+        self.geometry(f"+{x}+{y}")
+
+        # Styles
+        lbl_style = {"bg": "#1e1e1e", "fg": "white", "font": ("Segoe UI", 10)}
+        entry_bg = "#333333"
+        entry_fg = "white"
+
+        # Form
+        tk.Label(self, text="LEAD NAME / BUSINESS", **lbl_style).pack(anchor="w", padx=20, pady=(20, 5))
+        self.ent_name = tk.Entry(self, bg=entry_bg, fg=entry_fg, relief="flat", font=("Segoe UI", 11))
+        self.ent_name.pack(fill="x", padx=20)
+        if default_name: self.ent_name.insert(0, default_name)
+
+        tk.Label(self, text="EMAIL ADDRESS", **lbl_style).pack(anchor="w", padx=20, pady=(15, 5))
+        self.ent_email = tk.Entry(self, bg=entry_bg, fg=entry_fg, relief="flat", font=("Segoe UI", 11))
+        self.ent_email.pack(fill="x", padx=20)
+        if default_email: self.ent_email.insert(0, default_email)
+
+        tk.Label(self, text="OUTCOME", **lbl_style).pack(anchor="w", padx=20, pady=(15, 5))
+        self.status_var = tk.StringVar(value="INTERESTED")
+        self.cmb_status = ttk.Combobox(self, textvariable=self.status_var, values=["INTERESTED", "NOT INTERESTED", "CALLBACK", "CLOSED WON", "BAD DATA"], state="readonly")
+        self.cmb_status.pack(fill="x", padx=20)
+
+        # Buttons
+        btn_frame = tk.Frame(self, bg="#1e1e1e")
+        btn_frame.pack(pady=30)
+
+        tk.Button(btn_frame, text="CANCEL", bg="#555", fg="white", font=("Segoe UI", 10, "bold"), relief="flat", padx=15, pady=5, command=self.destroy).pack(side="left", padx=10)
+        tk.Button(btn_frame, text="SAVE RECORD", bg="#4ec9b0", fg="white", font=("Segoe UI", 10, "bold"), relief="flat", padx=15, pady=5, command=self.save).pack(side="left", padx=10)
+        
+        # Focus name
+        self.ent_name.focus_set()
+
+    def save(self):
+        name = self.ent_name.get().strip()
+        email = self.ent_email.get().strip()
+        status = self.status_var.get()
+        self.callback(name, email, status)
+        self.destroy()
+
 # --- CUSTOM WIDGETS ---
 class DarkScrolledText(tk.Frame):
     def __init__(self, parent, **kwargs):
         super().__init__(parent)
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", style="Vertical.TScrollbar")
         self.scrollbar.pack(side="right", fill="y")
-        
         if 'highlightthickness' in kwargs: del kwargs['highlightthickness']
-
         self.text = tk.Text(self, yscrollcommand=self.scrollbar.set, highlightthickness=1, relief="flat", **kwargs)
         self.text.pack(side="left", fill="both", expand=True)
         self.scrollbar.config(command=self.text.yview)
@@ -227,7 +272,7 @@ class ModernHUD(tk.Tk):
                                    command=self.toggle_theme)
         self.btn_theme.pack(side="right", padx=5)
 
-        self._btn(self.header, "SAVE DB", styles.SHARED["success"], self.save_to_database, side="right")
+        self._btn(self.header, "SAVE DB", styles.SHARED["success"], self.open_save_dialog, side="right")
         self._btn(self.header, "RESET", styles.SHARED["danger"], self.reset_session, side="right")
         
         self.btn_mode = tk.Button(self.header, text=f"MODE: {self.cue_mode}", font=self.font_header, relief="flat", padx=15, pady=2, command=self.toggle_mode)
@@ -297,31 +342,22 @@ class ModernHUD(tk.Tk):
             self.header.config(bg=palette["header"])
             self.body.config(bg=palette["bg"])
             self.left_col.config(bg=palette["bg"])
-            
             for widget in [self.txt_transcript, self.txt_notepad, self.txt_cue]:
                 widget.config(bg=palette["panel"]) 
                 widget.text.config(bg=palette["panel"], fg=palette["text"], 
                                    insertbackground=palette["text"],
                                    highlightbackground=palette["border"], 
                                    highlightcolor=palette["border"])
-
             self.btn_theme.config(text=palette["icon"])
-
             for lbl in [self.lbl_status, self.lbl_trans, self.lbl_cues]:
                 bg_col = palette["header"] if lbl in self.header.winfo_children() else palette["bg"]
                 if lbl == self.lbl_trans: bg_col = palette["bg"] 
-                
                 fg_col = styles.SHARED["accent"] if lbl in [self.lbl_trans, self.lbl_cues] else palette["text_dim"]
-                
-                if lbl.master == self.frm_transcript_container or lbl.master == self.frm_cues_container:
-                     bg_col = palette["bg"]
-
+                if lbl.master == self.frm_transcript_container or lbl.master == self.frm_cues_container: bg_col = palette["bg"]
                 lbl.config(bg=bg_col, fg=fg_col)
-
             self.frm_cues_container.config(bg=palette["bg"])
             self.frm_transcript_container.config(bg=palette["bg"])
             self.right_col.config(bg=palette["panel"])
-            
             self.btn_missions.config(bg=styles.SHARED["accent"], fg="white")
             self.btn_mode.config(bg="#444", fg="white")
             self.menu_missions.config(bg=palette["menu_bg"], fg=palette["menu_fg"])
@@ -350,7 +386,6 @@ class ModernHUD(tk.Tk):
         if not key:
             print("⚠️ API KEY MISSING: Launching Setup Wizard...")
             user_input = simpledialog.askstring("KlixOS Setup", "OpenAI API Key is missing.\n\nPlease paste it here to save it permanently:")
-            
             if user_input and user_input.startswith("sk-"):
                 try:
                     with open(".env", "a") as f:
@@ -402,11 +437,9 @@ class ModernHUD(tk.Tk):
             self.active_mission_name = filename.replace('mission_', '').replace('.txt', '').upper()
             with open(filename, "r", encoding="utf-8") as f: self.mission_context = f.read()
             self.lbl_status.config(text=f"ACTIVE: {self.active_mission_name}", fg=styles.SHARED["success"])
-            
             opener = "Select Mission..."
             if "sell_drones" in filename: opener = '"Hi, this is Josh from Kolasa Ag Systems..."'
             elif "pitch_leads" in filename: opener = '"Hello, this is Josh from Kolasa Ag Systems..."'
-            
             self._update_cue(opener)
             self.transcript_history.append(f"[ME]: {opener}")
 
@@ -420,34 +453,33 @@ class ModernHUD(tk.Tk):
         self.txt_cue.delete(1.0, tk.END); self.txt_cue.insert("1.0", "Select a Mission to start...\n")
         self.txt_notepad.delete("1.0", tk.END); self.txt_notepad.insert("1.0", "• Notes will appear here...\n")
 
-    def save_to_database(self):
+    def open_save_dialog(self):
         # 1. Gather Data
         transcript = self.txt_transcript.get("1.0", tk.END).strip()
         if not transcript:
             messagebox.showinfo("Empty", "Nothing to save yet.")
             return
 
-        # 2. Try to find Email in Notepad
-        found_email = None
-        found_name = None
+        # 2. Try to find Email/Name in Notepad
+        found_email = ""
+        found_name = ""
         for note in self.unique_notes:
-            if "email:" in note.lower():
-                found_email = note.split(":", 1)[1].strip()
-            if "name:" in note.lower() and "mission" not in note.lower():
-                found_name = note.split(":", 1)[1].strip()
+            if "email:" in note.lower(): found_email = note.split(":", 1)[1].strip()
+            if "name:" in note.lower() and "mission" not in note.lower(): found_name = note.split(":", 1)[1].strip()
 
-        # 3. If no email, Ask User
-        if not found_email:
-            found_email = simpledialog.askstring("Save Lead", "No email found in notes.\n\nEnter Lead Email (or leave blank):")
-        
-        if not found_name:
-             found_name = simpledialog.askstring("Save Lead", "Enter Lead Name (or leave blank):")
+        # 3. Launch Custom Dialog
+        SaveLeadDialog(self, found_name, found_email, self.perform_db_save)
 
-        # 4. Save
-        success, msg = save_call_to_neon(self.active_mission_name, transcript, self.unique_notes, found_email, found_name)
+    def perform_db_save(self, name, email, status):
+        transcript = self.txt_transcript.get("1.0", tk.END).strip()
+        success, msg = save_call_to_neon(self.active_mission_name, transcript, self.unique_notes, email, name, status)
         
         if success:
-            messagebox.showinfo("Success", f"Call saved to Database!\nLead: {found_email or 'Anonymous'}")
+            # Subtle feedback in UI
+            self.lbl_status.config(text=f"SAVED: {name}", fg=styles.SHARED["success"])
+            print(f"✅ DB SUCCESS: Saved lead '{name}' as '{status}'")
+            # Clear status after 3 seconds
+            self.after(3000, lambda: self.lbl_status.config(text=f"ACTIVE: {self.active_mission_name}"))
         else:
             messagebox.showerror("Database Error", msg)
 
@@ -462,19 +494,14 @@ class ModernHUD(tk.Tk):
 
     def _run_ai(self, text):
         if not self.client: return
-
         if self.mission_context == "NO MISSION SELECTED":
             print("⚠️ IGNORED: No Mission Selected.")
             self.gui_queue.put(("ai", "[CUE]: PLEASE SELECT A MISSION FROM THE MENU."))
             return
-
         self.gui_queue.put(("ai", "[ANALYZING...]"))
-        
         self.transcript_history.append(f"[THEM]: {text}")
         if len(self.transcript_history) > HISTORY_SIZE: self.transcript_history.pop(0)
-
         sys_msg = f"{PROMPT_SCRIPT if self.cue_mode == 'SCRIPT' else PROMPT_STRATEGY}\n{BASE_SYSTEM_PROMPT.format(mission=self.mission_context, history=chr(10).join(self.transcript_history), text=text)}"
-        
         try:
             resp = self.client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": sys_msg}], temperature=0.6)
             content = resp.choices[0].message.content.strip()
@@ -494,7 +521,6 @@ class ModernHUD(tk.Tk):
                         self.txt_notepad.insert(tk.END, "• "); self.txt_notepad.insert(tk.END, f"{k}:", "key_bold"); self.txt_notepad.insert(tk.END, f"{v}\n")
                     else: self.txt_notepad.insert(tk.END, f"• {line}\n")
                     self.txt_notepad.see(tk.END)
-        
         if "[CUE]:" in text:
             self._update_cue(text.split("[CUE]:")[1].split("|")[0].strip().strip('"'))
 
