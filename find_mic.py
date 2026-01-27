@@ -1,4 +1,4 @@
-﻿import pyaudio
+import pyaudio
 import time
 
 def test_microphone():
@@ -23,7 +23,7 @@ def test_microphone():
 
     try:
         target_index = int(target_index)
-        stream = p.open(format=pyaudio.paInt16, channels=1, rate=44100, input=True, input_device_index=target_index, frames_per_buffer=1024)
+        stream = p.open(format=pyaudio.paInt16, channels=1, rate=48000, input=True, input_device_index=target_index, frames_per_buffer=1024)
 
         print(f"\n[LISTENING on Index {target_index}] - Please speak now...")
         print("Press Ctrl+C to stop.\n")
@@ -48,3 +48,4 @@ def test_microphone():
 
 if __name__ == "__main__":
     test_microphone()
+

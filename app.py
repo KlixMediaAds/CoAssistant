@@ -1,5 +1,5 @@
 ﻿import tkinter as tk
-from tkinter import ttk, font
+from tkinter import ttk, font, simpledialog, messagebox
 import threading
 import queue
 import os
@@ -11,15 +11,137 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from RealtimeSTT import AudioToTextRecorder
 import styles
+import pyaudio
+import psycopg2 
 
 # --- CONFIGURATION ---
 load_dotenv()
-DEVICE_INDEX = int(os.getenv("DEVICE_INDEX", 1))
 HISTORY_SIZE = 20
 LOG_DIR = "logs"
 
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
+
+# --- PRE-FLIGHT CHECKS ---
+def ensure_api_key():
+    """Checks for API key at startup."""
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        print("⚠️ API KEY MISSING: Launching Setup Wizard...")
+        root = tk.Tk()
+        root.withdraw()
+        user_input = simpledialog.askstring("KlixOS Setup", "OpenAI API Key is missing.\n\nPlease paste it here:")
+        root.destroy()
+        
+        if user_input and user_input.startswith("sk-"):
+            with open(".env", "a") as f:
+                f.write(f"\nOPENAI_API_KEY={user_input.strip()}")
+            os.environ["OPENAI_API_KEY"] = user_input.strip()
+            print("✅ SUCCESS: API Key saved.")
+            return True
+        else:
+            print("❌ SETUP CANCELLED.")
+            return False
+    return True
+
+def get_smart_mic_index():
+    target_name = os.getenv("MIC_NAME", "Voicemeeter") 
+    p = pyaudio.PyAudio()
+    
+    print(f"DEBUG: Searching for microphone matching '{target_name}'...")
+    candidates = []
+    
+    for i in range(p.get_device_count()):
+        try:
+            info = p.get_device_info_by_index(i)
+            if info['maxInputChannels'] > 0:
+                name = info['name']
+                if target_name.lower() in name.lower():
+                    candidates.append((i, name))
+        except: pass
+    p.terminate()
+
+    if not candidates:
+        print("⚠️ No matching mic found. Using default index 1.")
+        return 1
+
+    best_index = candidates[0][0]
+    best_name = candidates[0][1]
+
+    for idx, name in candidates:
+        if "B1" in name:
+            best_index = idx
+            best_name = name
+            break
+        elif "Output" in name and "Aux" not in name:
+            best_index = idx
+            best_name = name
+    
+    print(f"✅ AUTO-DETECT: Selected '{best_name}' at Index {best_index}")
+    return best_index
+
+# --- DATABASE ENGINE ---
+def save_call_to_neon(mission, transcript, notes, client_email=None, client_name=None):
+    # 1. Check for URL
+    db_url = os.getenv("DATABASE_URL")
+    
+    # 2. Self-Healing: If missing, ask user
+    if not db_url:
+        root = tk.Tk()
+        root.withdraw() # Hide main window
+        user_input = simpledialog.askstring("Database Setup", "Database URL is missing.\n\nPaste your NeonDB Connection String here:")
+        root.destroy()
+        
+        if user_input and "postgres" in user_input:
+            # Save to .env
+            try:
+                with open(".env", "a") as f:
+                    f.write(f"\nDATABASE_URL={user_input.strip()}")
+                os.environ["DATABASE_URL"] = user_input.strip() # Update memory
+                db_url = user_input.strip()
+            except Exception as e:
+                return False, f"Could not save .env: {str(e)}"
+        else:
+            return False, "No Database URL provided."
+
+    # 3. Connect & Save
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        
+        # UPSERT LEAD
+        lead_id = None
+        if client_email:
+            cur.execute("SELECT id FROM leads WHERE email = %s", (client_email,))
+            res = cur.fetchone()
+            if res:
+                lead_id = res[0]
+                if client_name:
+                    cur.execute("UPDATE leads SET name = %s, updated_at = NOW() WHERE id = %s", (client_name, lead_id))
+            else:
+                cur.execute(
+                    "INSERT INTO leads (name, email, created_at) VALUES (%s, %s, NOW()) RETURNING id",
+                    (client_name or "Unknown Lead", client_email)
+                )
+                lead_id = cur.fetchone()[0]
+        else:
+            cur.execute("INSERT INTO leads (name, created_at) VALUES ('Anonymous Caller', NOW()) RETURNING id")
+            lead_id = cur.fetchone()[0]
+
+        # INSERT CALL
+        ai_summary = "\n".join(notes)
+        cur.execute("""
+            INSERT INTO calls (lead_id, mission_name, transcript, ai_summary, call_date)
+            VALUES (%s, %s, %s, %s, NOW())
+        """, (lead_id, mission, transcript, ai_summary))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True, "Saved to NeonDB!"
+        
+    except Exception as e:
+        return False, str(e)
 
 # --- SYSTEM PROMPTS ---
 PROMPT_STRATEGY = "CONTEXT: SALES SIMULATION. ROLE: Coach. OUTPUT: [CUE]: Advice."
@@ -33,13 +155,9 @@ class DarkScrolledText(tk.Frame):
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", style="Vertical.TScrollbar")
         self.scrollbar.pack(side="right", fill="y")
         
-        if 'highlightthickness' in kwargs:
-            del kwargs['highlightthickness']
+        if 'highlightthickness' in kwargs: del kwargs['highlightthickness']
 
-        self.text = tk.Text(self, yscrollcommand=self.scrollbar.set, 
-                            highlightthickness=1, 
-                            relief="flat", 
-                            **kwargs)
+        self.text = tk.Text(self, yscrollcommand=self.scrollbar.set, highlightthickness=1, relief="flat", **kwargs)
         self.text.pack(side="left", fill="both", expand=True)
         self.scrollbar.config(command=self.text.yview)
     
@@ -70,7 +188,7 @@ class ModernHUD(tk.Tk):
         self._init_fonts()
         self._init_styles()
         self._build_ui()
-        self._init_openai()
+        self._init_openai_robust()
         self.apply_theme("dark", animate=False) 
 
         threading.Thread(target=self._audio_loop, daemon=True).start()
@@ -109,7 +227,9 @@ class ModernHUD(tk.Tk):
                                    command=self.toggle_theme)
         self.btn_theme.pack(side="right", padx=5)
 
+        self._btn(self.header, "SAVE DB", styles.SHARED["success"], self.save_to_database, side="right")
         self._btn(self.header, "RESET", styles.SHARED["danger"], self.reset_session, side="right")
+        
         self.btn_mode = tk.Button(self.header, text=f"MODE: {self.cue_mode}", font=self.font_header, relief="flat", padx=15, pady=2, command=self.toggle_mode)
         self.btn_mode.pack(side="right", padx=10)
 
@@ -217,7 +337,6 @@ class ModernHUD(tk.Tk):
             def step_anim(i):
                 if i > steps: return
                 t = i / steps
-                # FIX: Check if VALUE starts with '#' instead of KEY
                 inter_palette = {k: interpolate(start_colors[k], target[k], t) for k in target if target[k].startswith("#")}
                 inter_palette["icon"] = target["icon"]
                 inter_palette["menu_bg"] = target["menu_bg"]
@@ -226,9 +345,30 @@ class ModernHUD(tk.Tk):
                 self.after(delay, lambda: step_anim(i+1))
             step_anim(0)
 
-    def _init_openai(self):
+    def _init_openai_robust(self):
         key = os.getenv("OPENAI_API_KEY")
-        if key: self.client = OpenAI(api_key=key)
+        if not key:
+            print("⚠️ API KEY MISSING: Launching Setup Wizard...")
+            user_input = simpledialog.askstring("KlixOS Setup", "OpenAI API Key is missing.\n\nPlease paste it here to save it permanently:")
+            
+            if user_input and user_input.startswith("sk-"):
+                try:
+                    with open(".env", "a") as f:
+                        f.write(f"\nOPENAI_API_KEY={user_input.strip()}")
+                    os.environ["OPENAI_API_KEY"] = user_input.strip()
+                    key = user_input.strip()
+                    print("✅ SUCCESS: API Key saved to .env")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Could not save .env file: {e}")
+            else:
+                print("❌ SETUP CANCELLED.")
+        
+        if key: 
+            self.client = OpenAI(api_key=key)
+            print("DEBUG: OpenAI Client Initialized.")
+        else:
+            print("CRITICAL ERROR: Still no API Key. AI features disabled.")
+            self.gui_queue.put(("ai", "ERROR: NO API KEY. RESTART APP."))
 
     def _audio_loop(self):
         print("DEBUG: Audio Loop Started")
@@ -274,9 +414,42 @@ class ModernHUD(tk.Tk):
         self.transcript_history = []
         self.unique_notes = set()
         self.mission_context = "NO MISSION SELECTED"
+        self.cue_mode = "SCRIPT"
+        self.btn_mode.config(text=f"MODE: {self.cue_mode}")
         self.txt_transcript.delete(1.0, tk.END)
         self.txt_cue.delete(1.0, tk.END); self.txt_cue.insert("1.0", "Select a Mission to start...\n")
         self.txt_notepad.delete("1.0", tk.END); self.txt_notepad.insert("1.0", "• Notes will appear here...\n")
+
+    def save_to_database(self):
+        # 1. Gather Data
+        transcript = self.txt_transcript.get("1.0", tk.END).strip()
+        if not transcript:
+            messagebox.showinfo("Empty", "Nothing to save yet.")
+            return
+
+        # 2. Try to find Email in Notepad
+        found_email = None
+        found_name = None
+        for note in self.unique_notes:
+            if "email:" in note.lower():
+                found_email = note.split(":", 1)[1].strip()
+            if "name:" in note.lower() and "mission" not in note.lower():
+                found_name = note.split(":", 1)[1].strip()
+
+        # 3. If no email, Ask User
+        if not found_email:
+            found_email = simpledialog.askstring("Save Lead", "No email found in notes.\n\nEnter Lead Email (or leave blank):")
+        
+        if not found_name:
+             found_name = simpledialog.askstring("Save Lead", "Enter Lead Name (or leave blank):")
+
+        # 4. Save
+        success, msg = save_call_to_neon(self.active_mission_name, transcript, self.unique_notes, found_email, found_name)
+        
+        if success:
+            messagebox.showinfo("Success", f"Call saved to Database!\nLead: {found_email or 'Anonymous'}")
+        else:
+            messagebox.showerror("Database Error", msg)
 
     def on_close(self): self.destroy()
 
@@ -289,6 +462,12 @@ class ModernHUD(tk.Tk):
 
     def _run_ai(self, text):
         if not self.client: return
+
+        if self.mission_context == "NO MISSION SELECTED":
+            print("⚠️ IGNORED: No Mission Selected.")
+            self.gui_queue.put(("ai", "[CUE]: PLEASE SELECT A MISSION FROM THE MENU."))
+            return
+
         self.gui_queue.put(("ai", "[ANALYZING...]"))
         
         self.transcript_history.append(f"[THEM]: {text}")
@@ -320,8 +499,10 @@ class ModernHUD(tk.Tk):
             self._update_cue(text.split("[CUE]:")[1].split("|")[0].strip().strip('"'))
 
 if __name__ == "__main__":
-    try:
-        recorder = AudioToTextRecorder(model="tiny", language="en", spinner=False, enable_realtime_transcription=True, input_device_index=DEVICE_INDEX)
-        print("✅ AUDIO ENGINE READY.")
-        ModernHUD(recorder).mainloop()
-    except Exception as e: print(f"CRITICAL ERROR: {e}")
+    if ensure_api_key():
+        try:
+            mic_idx = get_smart_mic_index()
+            recorder = AudioToTextRecorder(model="tiny", language="en", spinner=False, enable_realtime_transcription=True, input_device_index=mic_idx)
+            print("✅ AUDIO ENGINE READY.")
+            ModernHUD(recorder).mainloop()
+        except Exception as e: print(f"CRITICAL ERROR: {e}")

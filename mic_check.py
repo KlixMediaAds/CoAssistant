@@ -1,4 +1,4 @@
-﻿import pyaudio
+import pyaudio
 import os
 import sys
 from dotenv import load_dotenv
@@ -17,7 +17,7 @@ def main():
         
         stream = p.open(format=pyaudio.paInt16,
                         channels=1,
-                        rate=44100,
+                        rate=48000,
                         input=True,
                         input_device_index=DEVICE_INDEX,
                         frames_per_buffer=1024)
@@ -41,3 +41,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
