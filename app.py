@@ -1,4 +1,6 @@
-﻿import tkinter as tk
+﻿import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+import tkinter as tk
 from tkinter import ttk, font, simpledialog, messagebox
 import threading
 import queue
@@ -426,7 +428,15 @@ if __name__ == "__main__":
     try:
         if backend.ensure_api_key():
             mic_idx = backend.get_smart_mic_index()
-            recorder = AudioToTextRecorder(model="tiny", language="en", spinner=False, enable_realtime_transcription=True, input_device_index=mic_idx)
+            # FORCE int8 to avoid memory crash on Windows CPU
+            recorder = AudioToTextRecorder(
+                model="tiny", 
+                language="en", 
+                spinner=False, 
+                enable_realtime_transcription=True, 
+                input_device_index=mic_idx,
+                compute_type="int8"
+            )
             print("✅ AUDIO ENGINE READY.")
             ModernHUD(recorder).mainloop()
     except Exception as e: print(f"CRITICAL ERROR: {e}")

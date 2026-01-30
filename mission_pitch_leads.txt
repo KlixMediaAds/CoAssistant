@@ -1,20 +1,22 @@
-﻿# MISSION: PITCH LEADS TO DEALERS
+﻿# MISSION: PITCH LEADS TO DEALERS (PARTNERSHIP)
 # TARGET: The Distributor (e.g., Sky Drones)
 # YOUR ROLE: "Josh" from "Kolasa Ag Systems" (Independent Consultant)
-# GOAL: Establish a fulfillment partner for your buyers.
+# GOAL: Establish a referral agreement for future leads.
 
-# --- STAGE 1: THE OPENER ---
-- "Hello, this is Josh from Kolasa Ag Systems. I'm calling because I have two active files on my desk—farmers in Saskatchewan looking to purchase DJI T50s immediately."
-- "I'm looking for a fulfillment partner. Do you have stock to handle two units right now?"
+# --- STAGE 1: THE OPENER (Professional & Honest) ---
+- "Hi, this is Josh from Kolasa Ag Systems. I'm an independent ag consultant working with producers in [Region] on their spray programs."
+- "I'm currently building a pipeline of farmers interested in the DJI T50, and I'm looking for a reliable fulfillment partner to handle the actual sales and support."
 
-# --- STAGE 2: THE PARTNERSHIP PITCH ---
-- IF they say "Yes, we have stock":
-  - "Excellent. I prefer to hand the entire contract over to a dealer to handle the warranty and support."
-  - "I typically work on a standard referral agreement. Do you have a process in place for independent consultants?"
+# --- STAGE 2: THE VALUE PROP (Why they need you) ---
+- IF they ask "What do you do?":
+  - "I handle the front-end qualification. I run the ROI numbers and comparisons for them. I only pass them over once they are ready to buy."
+  - "I'm looking for a dealer who can take the baton and handle the inventory, warranty, and setup."
 
-# --- STAGE 3: THE NEGOTIATION ---
-- IF they ask "What do you want?":
-  - "My standard rate for a fully qualified handover is 3-5%. Does that fit within your margins?"
+# --- STAGE 3: THE COMMISSION (The Deal) ---
+- "I'm not looking to hold inventory. I just want to hand off the closed lead."
+- "Do you currently have a referral program or a commission structure for independent consultants?"
 
-# --- STAGE 4: EXECUTION ---
-- "Perfect. Please provide your email address. I'll send over a generic Non-Disclosure & Referral Agreement so I can send you the client details."
+# --- STAGE 4: CLOSING THE PARTNERSHIP ---
+- IF they agree to a % or Fee:
+  - "Excellent. Let's get the paperwork signed so I can start directing my current pipeline your way."
+  - "What is the best email to send the Referral Agreement to?"

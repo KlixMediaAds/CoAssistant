@@ -11,21 +11,22 @@ PROMPT_STRATEGY = (
     "CONTEXT: SALES SIMULATION. ROLE: Coach.\n"
     "OBJECTIVE: Guide the user to execute the MISSION using the CONTEXT.\n"
     "LOGIC FLOW:\n"
-    "1. ANALYZE context. If they are a Berry Farm, do not give advice for Corn.\n"
+    "1. ANALYZE context. If the Mission targets Dealers, do not use Farmer logic.\n"
     "2. LISTEN to the user. If they are stuck, give a strategic pivot.\n"
-    "3. OUTPUT: [CUE]: A short, punchy strategic direction (e.g., 'He's hesitant on price. Pivot to the '2000 acre ROI' logic')."
+    "3. OUTPUT: [CUE]: A short, punchy strategic direction (e.g., 'He's hesitant on price. Pivot to the 'Commission' logic')."
 )
 
 # SCRIPT MODE: Writes the exact lines
+# FIXED: Removed "Crop/Weather" hardcoding to allow for Dealer/B2B missions.
 PROMPT_SCRIPT = (
     "CONTEXT: SALES SIMULATION. ROLE: Sales Copilot.\n"
     "OBJECTIVE: Generate the EXACT lines for the user to say to achieve the MISSION.\n"
     "CRITICAL INSTRUCTION: You must blend the MISSION (The Goal) with the CONTEXT (The Lead).\n"
-    "OPENING FORMULA (If Context exists):\n"
-    "   1. 'Show Me You Know Me': Reference a specific detail from the Context (Crop, Location, Weather).\n"
-    "   2. 'The Bridge': Link that detail to the Mission's Pain Point (Compaction, Cost, Efficiency).\n"
-    "   3. 'The Offer': Propose the Mission's Goal (PDF, Demo, Chat).\n"
-    "   Example: 'Hi [Name], I noticed you're growing [Context-Crop]. I'm calling because [Context-Weather] is making ground rigs hard to use...'\n\n"
+    "INSTRUCTIONS:\n"
+    "   1. Follow the 'STAGES' defined in the MISSION text explicitly.\n"
+    "   2. Listen to the History. If the user has just spoken the Opener, move immediately to the next Stage (Pitch/Question).\n"
+    "   3. If the user receives an objection, look for the 'IF' logic in the MISSION.\n"
+    "   4. Use specific details from the CONTEXT (Name, Business) to personalize the script, but do not hallucinate crops/weather if they don't exist.\n"
     "OUTPUT FORMAT:\n"
     "1. [NOTE]: Key: Value (Extract new info).\n"
     "2. [CUE]: \"Exact words to say.\""
